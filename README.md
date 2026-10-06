@@ -184,3 +184,24 @@ py -3.12 -m venv .venv
 ```
 
 注意: torch CUDA 版从 `https://download.pytorch.org/whl/cu126` 安装(网络不稳时可用本地 wheel 兜底,见 `kokoro\install_local_torch.py`)。
+
+---
+
+## 七、GitHub 推送备忘
+
+仓库: `https://github.com/googlebox007/audio-models` (公开,`main` 分支)
+
+本机网络**直连 github.com 的 443 端口会被重置**,但 `ghproxy.net` 镜像可访问。
+`origin` 保持干净的直连地址;只有推送失败时,才临时用镜像内联转发(不污染全局配置):
+
+```powershell
+# 直连失败时, 用 ghproxy 镜像推一次 (带 GitHub token, 不回显)
+$token = gh auth token
+git push "https://x-access-token:$token@ghproxy.net/https://github.com/googlebox007/audio-models.git" main
+```
+
+不要全局加 `url."https://ghproxy.net/...".insteadOf="https://github.com/"` 的重写,
+否则这台机器上**所有** GitHub 仓库都会静默走第三方代理(隐私/安全隐患)。
+
+`.gitignore` 已排除 `kokoro/.venv`、`sensevoice/.venv`、`wheels/`、`logs/` 与模型权重,
+仓库只含可复用脚本与文档,克隆后按「六、重新安装」重建 venv 即可。
