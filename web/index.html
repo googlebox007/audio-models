@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-touch-icon" href="icon.svg">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>本地音频模型 · Kokoro + SenseVoice</title>
+<style>
+:root{
+  --bg:#0f1117; --panel:#171a23; --panel2:#1e2230; --line:#2a2f3d;
+  --txt:#e6e9f0; --muted:#8b93a7; --acc:#4f8cff; --acc2:#35d0a5;
+  --warn:#ff9f43; --err:#ff5d6c; --chip:#232838;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:radial-gradient(1200px 600px at 50% -10%,#1a2032 0%,var(--bg) 60%);
+  color:var(--txt);
+  font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+  line-height:1.5; padding:24px;
+}
+.wrap{max-width:960px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px}
+.header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.theme-btn{
+  width:38px;height:38px;border-radius:50%;border:1px solid var(--line);
+  background:var(--chip);color:var(--txt);cursor:pointer;font-size:18px;
+  display:flex;align-items:center;justify-content:center;flex:0 0 auto;
+  transition:filter .15s,transform .1s;padding:0;
+}
+.theme-btn:hover{filter:brightness(1.15)}
+.theme-btn:active{transform:scale(.94)}
+.theme-btn .ic{display:none}
+.theme-btn .ic-sun,.theme-btn[data-theme="dark"] .ic-moon{display:block}
+.theme-btn[data-theme="light"] .ic-sun{display:none}
+h1{font-size:20px;margin:0;font-weight:600}
+h1 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--err);margin-right:8px;vertical-align:middle}
+.pills{display:flex;gap:8px}
+.pill{font-size:12px;padding:5px 11px;border-radius:20px;background:var(--chip);color:var(--muted);border:1px solid var(--line)}
+.pill.ok{color:#0c2b22;background:var(--acc2);border-color:var(--acc2);font-weight:600}
+.pill.bad{color:#2a0d10;background:var(--err);border-color:var(--err);font-weight:600}
+
+.tabs{display:flex;gap:6px;margin:8px 0 16px;border-bottom:1px solid var(--line)}
+.tab{
+  padding:10px 18px;cursor:pointer;border:none;background:transparent;color:var(--muted);
+  font-size:15px;font-weight:600;border-bottom:2px solid transparent;
+}
+.tab.active{color:var(--txt);border-bottom-color:var(--acc)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:16px}
+.card h2{font-size:15px;margin:0 0 14px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+label{display:block;font-size:13px;color:var(--muted);margin:14px 0 6px}
+textarea,input[type=text],input[type=number],select{
+  width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:9px;
+  color:var(--txt);padding:10px 12px;font-size:14px;font-family:inherit;
+}
+textarea{resize:vertical;min-height:90px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>*{flex:1;min-width:130px}
+.range-wrap{display:flex;align-items:center;gap:10px}
+input[type=range]{flex:1;padding:0}
+.range-val{min-width:44px;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px}
+
+.btn{
+  display:inline-flex;align-items:center;gap:8px;cursor:pointer;border:none;
+  background:var(--acc);color:#fff;border-radius:10px;padding:11px 22px;font-size:14px;
+  font-weight:600;margin-top:16px;transition:filter .15s;
+}
+.btn:hover{filter:brightness(1.1)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.green{background:var(--acc2)}
+.btn.ghost{background:var(--chip);border:1px solid var(--line)}
+
+.drop{
+  border:2px dashed var(--line);border-radius:12px;padding:22px;text-align:center;
+  color:var(--muted);cursor:pointer;transition:border-color .15s;background:var(--panel2);
+}
+.drop.over{border-color:var(--acc);color:var(--txt)}
+.drop input{display:none}
+
+.result{margin-top:14px;font-size:14px;white-space:pre-wrap;word-break:break-word;
+  background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px;min-height:44px}
+.result .meta{color:var(--muted);font-size:12px;margin-top:8px}
+.result.empty{color:var(--muted);font-style:italic}
+
+audio{width:100%;margin-top:14px;display:none}
+audio.show{display:block}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);
+  border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.hidden{display:none}
+.note{font-size:12px;color:var(--muted);margin-top:8px}
+.errbox{margin-top:10px;color:var(--err);font-size:13px;background:#2a1417;border:1px solid #4a2429;border-radius:8px;padding:10px 12px}
+footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px}
+
+/* ========= 移动端自适应 ========= */
+/* 安全区 + 触控目标 + iOS 防滚底 */
+:root{ --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px); }
+
+/* ≤ 760px:手机 / 小平板 */
+@media (max-width:760px){
+  body{padding:14px;padding-top:calc(14px + var(--safe-t));padding-bottom:calc(20px + var(--safe-b));
+       -webkit-text-size-adjust:100%;}
+  .wrap{max-width:100%}
+  header{flex-direction:column;align-items:flex-start;gap:8px;margin-bottom:12px}
+  h1{font-size:17px}
+  .pills{flex-wrap:wrap;gap:6px}
+  .pill{font-size:11px;padding:4px 9px}
+
+  /* 标签:横向可滚,避免挤压 */
+  .tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+        padding-bottom:2px}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:0 0 auto;min-width:max-content;padding:9px 14px;font-size:14px;white-space:nowrap}
+
+  .card{padding:16px;margin-bottom:12px;border-radius:12px}
+  .card h2{font-size:13px;margin-bottom:12px}
+  label{font-size:12px;margin:10px 0 5px}
+  textarea,input[type=text],input[type=number],select{
+    padding:11px 12px;font-size:16px;   /* 16px 防 iOS 聚焦时自动放大 */
+    border-radius:10px;
+  }
+  textarea{min-height:72px}
+  select{appearance:none;padding-right:30px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath fill='%238b93a7' d='M0 0l6 7 6-7z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+  input[type=range]{width:100%}
+  .row{gap:8px}
+  .row>*{min-width:0;flex-basis:46%}           /* 手机上 2 列 */
+  .row>*:last-child{flex-basis:100%}             /* 语速等第三项独占一行 */
+
+  .btn{width:100%;justify-content:center;padding:13px;font-size:15px;margin-top:14px;
+       touch-action:manipulation}
+  .drop{padding:18px;min-height:64px}
+  .result{font-size:14px;padding:12px}
+  audio{margin-top:12px}
+  .note,.errbox{font-size:12px}
+  footer{font-size:11px;margin-top:16px;padding:0 4px}
+}
+
+/* 2 列布局在小屏上更拥挤时: 480px 起单列 */
+@media (max-width:480px){
+  .row>*{flex-basis:100%}
+  h1{font-size:16px}
+  .pill{font-size:10px}
+}
+
+/* 大字号 / 系统缩放偏好: 跟随并放大间距 */
+@media (prefers-reduced-motion:reduce){
+  .spin{animation:none;border-top-color:var(--muted)}
+  *{transition:none!important}
+}
+@media (min-width:1400px){
+  .wrap{max-width:1080px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="dot" id="dot"></span>本地音频模型</h1>
+    <div class="header-right">
+      <button class="theme-btn" id="reset-btn" title="清空所有记忆设置" aria-label="清空所有记忆设置">♻️</button>
+      <button class="theme-btn" id="theme-btn" title="切换深浅色" aria-label="切换深浅色"></button>
+      <div class="pills">
+        <span class="pill" id="pill-tts">TTS 8898 · 连接中…</span>
+        <span class="pill" id="pill-asr">ASR 8899 · 连接中…</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="tts">🎙️ 语音合成 (Kokoro)</button>
+    <button class="tab" data-tab="asr">📝 语音识别 (SenseVoice)</button>
+    <button class="tab" data-tab="flow">🔄 串联 (ASR→TTS)</button>
+  </div>
+
+  <!-- TTS -->
+  <div class="card" data-panel="tts">
+    <h2>文本 → 语音</h2>
+    <label>文本</label>
+    <textarea id="tts-text" placeholder="输入要合成的文字,支持中英日法西等…">你好,这里是本地语音合成服务。</textarea>
+    <div class="row">
+      <div>
+        <label>音色</label>
+        <select id="tts-voice"></select>
+      </div>
+      <div>
+        <label>语言</label>
+        <select id="tts-lang">
+          <option value="auto">自动判断</option>
+          <option value="a">美音 (a)</option>
+          <option value="b">英音 (b)</option>
+          <option value="j">日语 (j)</option>
+          <option value="z" selected>中文 (z)</option>
+          <option value="e">西语 (e)</option>
+          <option value="f">法语 (f)</option>
+          <option value="h">印地语 (h)</option>
+          <option value="i">意大利语 (i)</option>
+          <option value="p">葡语 (p)</option>
+        </select>
+      </div>
+      <div>
+        <label>语速</label>
+        <div class="range-wrap">
+          <input type="range" id="tts-speed" min="0.5" max="1.5" step="0.1" value="1.0">
+          <span class="range-val" id="tts-speed-val">1.0×</span>
+        </div>
+      </div>
+    </div>
+    <button class="btn" id="tts-go">⚡ 合成语音</button>
+    <div class="errbox hidden" id="tts-err"></div>
+    <audio id="tts-audio" controls></audio>
+    <p class="note" id="tts-note"></p>
+  </div>
+
+  <!-- ASR -->
+  <div class="card hidden" data-panel="asr">
+    <h2>语音 → 文本</h2>
+    <label>上传音频 (MP3 / WAV / FLAC / OGG / M4A…)</label>
+    <div class="drop" id="asr-drop">
+      <input type="file" id="asr-file" accept="audio/*">
+      <div id="asr-filelabel">点击或拖拽音频文件到此处</div>
+    </div>
+    <div class="row">
+      <div>
+        <label>语言</label>
+        <select id="asr-lang">
+          <option value="auto">自动检测</option>
+          <option value="zh" selected>中文</option>
+          <option value="en">英语</option>
+          <option value="yue">粤语</option>
+          <option value="ja">日语</option>
+          <option value="ko">韩语</option>
+        </select>
+      </div>
+      <div>
+        <label>数字归一化 (ITN)</label>
+        <select id="asr-itn">
+          <option value="true" selected>开启</option>
+          <option value="false">关闭</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn green" id="asr-go">🔍 转写文本</button>
+    <div class="errbox hidden" id="asr-err"></div>
+    <div class="result empty hidden" id="asr-out"></div>
+  </div>
+
+  <!-- FLOW -->
+  <div class="card hidden" data-panel="flow">
+    <h2>ASR → TTS 一键串联</h2>
+    <p class="note" style="margin-top:0">上传录音 → SenseVoice 识别成文字 → Kokoro 换成指定音色重新播报。常用于换音色、清语音转干净配音。</p>
+    <label>录音文件</label>
+    <div class="drop" id="flow-drop">
+      <input type="file" id="flow-file" accept="audio/*">
+      <div id="flow-filelabel">点击或拖拽录音到此处</div>
+    </div>
+    <div class="row">
+      <div>
+        <label>识别语言</label>
+        <select id="flow-asrlang">
+          <option value="auto">自动</option>
+          <option value="zh" selected>中文</option>
+          <option value="en">英语</option>
+          <option value="yue">粤语</option>
+          <option value="ja">日语</option>
+          <option value="ko">韩语</option>
+        </select>
+      </div>
+      <div>
+        <label>目标音色</label>
+        <select id="flow-voice"></select>
+      </div>
+      <div>
+        <label>合成语言</label>
+        <select id="flow-ttslang">
+          <option value="auto" selected>自动</option>
+          <option value="z">中文</option>
+          <option value="a">美音</option>
+          <option value="b">英音</option>
+          <option value="j">日语</option>
+          <option value="e">西语</option>
+          <option value="f">法语</option>
+          <option value="h">印地语</option>
+          <option value="i">意语</option>
+          <option value="p">葡语</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn" id="flow-go">🚀 识别并换音色</button>
+    <div class="errbox hidden" id="flow-err"></div>
+    <div class="result empty hidden" id="flow-out"></div>
+    <audio id="flow-audio" controls></audio>
+  </div>
+
+  <footer>Kokoro-82M TTS · SenseVoice-Small ASR · 本地离线运行 · 数据不出内网</footer>
+</div>
+<script src="config.js"></script>
+<script>
+// 注册 PWA 离线缓存(添加到主屏幕后可脱机打开界面,API 调用仍需后端在线)
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  });
+}
+</script>
+<script>
+// 后端地址由 web_server.py 生成的 config.js 决定
+const CFG = window.__APICFG__ || { mode:"static", tts_base:"http://127.0.0.1:8898", asr_base:"http://127.0.0.1:8899" };
+const tts = (p) => CFG.tts_base + p;
+const asr = (p) => CFG.asr_base + p;
+
+// ---- 深浅色:跟随系统 + 手动切换(手动选择存 localStorage,优先于系统) ----
+const THEME_KEY = "audio-models-theme";
+function sysDark(){ return window.matchMedia("(prefers-color-scheme: dark)").matches; }
+function setPalette(dark){
+  const root = document.documentElement;
+  if(dark){
+    root.style.setProperty("--bg","#0f1117");
+    root.style.setProperty("--panel","#171a23");
+    root.style.setProperty("--panel2","#1e2230");
+    root.style.setProperty("--line","#2a2f3d");
+    root.style.setProperty("--txt","#e6e9f0");
+    root.style.setProperty("--muted","#8b93a7");
+    root.style.setProperty("--chip","#232838");
+    document.body.style.background =
+      "radial-gradient(1200px 600px at 50% -10%,#1a2032 0%,#0f1117 60%)";
+    const m=document.querySelector('meta[name=theme-color]'); if(m)m.setAttribute("content","#0f1117");
+  } else {
+    root.style.setProperty("--bg","#f3f5f9");
+    root.style.setProperty("--panel","#ffffff");
+    root.style.setProperty("--panel2","#eef1f6");
+    root.style.setProperty("--line","#d4d9e3");
+    root.style.setProperty("--txt","#1a1f2b");
+    root.style.setProperty("--muted","#5b6472");
+    root.style.setProperty("--chip","#e5e9f1");
+    document.body.style.background =
+      "radial-gradient(1200px 600px at 50% -10%,#e3e9f4 0%,#f3f5f9 60%)";
+    const m=document.querySelector('meta[name=theme-color]'); if(m)m.setAttribute("content","#f3f5f9");
+  }
+  const btn=document.getElementById("theme-btn");
+  if(btn){ btn.dataset.theme = dark ? "dark" : "light"; }
+}
+function currentTheme(){
+  const stored = localStorage.getItem(THEME_KEY);
+  return stored ? (stored === "light" ? false : true) : sysDark();
+}
+function applyTheme(){ setPalette(currentTheme()); }
+applyTheme();
+// 系统变化时,只有"未手动选择"才跟随
+if (window.matchMedia) {
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  const onChange = () => { if(!localStorage.getItem(THEME_KEY)) applyTheme(); };
+  mq.addEventListener ? mq.addEventListener("change", onChange) : mq.addListener(onChange);
+}
+// 手动切换按钮
+(function(){
+  const btn = document.getElementById("theme-btn");
+  if(!btn) return;
+  btn.innerHTML =
+    '<span class="ic ic-sun" aria-hidden="true">☀️</span>' +
+    '<span class="ic ic-moon" aria-hidden="true">🌙</span>';
+  btn.addEventListener("click", () => {
+    const next = currentTheme() ? "light" : "dark";
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme();
+  });
+  // 清除手动选择,恢复跟随系统
+  btn.ondblclick = () => {
+    localStorage.removeItem(THEME_KEY);
+    applyTheme();
+  };
+  btn.title = "点击切换深浅色,双击恢复跟随系统";
+})();
+
+// 清空所有记忆设置(主题 + 表单参数)
+document.getElementById("reset-btn").addEventListener("click", () => {
+  if(!confirm("清空所有记忆设置(主题与表单参数),恢复默认?\n\n· 主题恢复跟随系统\n· 各表单项恢复默认值")) return;
+  localStorage.removeItem(THEME_KEY);
+  localStorage.removeItem(SETTINGS_KEY);
+  location.reload();
+});
+document.getElementById("reset-btn").title = "清空主题与表单记忆,恢复默认(会刷新页面)";
+
+// ---- 设置记忆:把各表单项存到 localStorage,刷新后自动恢复 ----
+const SETTINGS_KEY = "audio-models-settings";
+function saveSettings(){
+  const s = {
+    tts_text: document.getElementById("tts-text").value,
+    tts_voice: document.getElementById("tts-voice").value,
+    tts_lang: document.getElementById("tts-lang").value,
+    tts_speed: document.getElementById("tts-speed").value,
+    asr_lang: document.getElementById("asr-lang").value,
+    asr_itn: document.getElementById("asr-itn").value,
+    flow_asrlang: document.getElementById("flow-asrlang").value,
+    flow_voice: document.getElementById("flow-voice").value,
+    flow_ttslang: document.getElementById("flow-ttslang").value,
+  };
+  try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }catch{}
+}
+function restoreSettings(){
+  let s = {};
+  try{ s = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; }catch{}
+  const set=(id,val)=>{ if(val!=null){const el=document.getElementById(id); if(el) el.value=val;} };
+  set("tts-text", s.tts_text);
+  set("tts-lang", s.tts_lang);
+  set("tts-speed", s.tts_speed);
+  set("asr-lang", s.asr_lang);
+  set("asr-itn", s.asr_itn);
+  set("flow-asrlang", s.flow_asrlang);
+  set("flow-ttslang", s.flow_ttslang);
+  // 音色: 先填下拉,再恢复已选
+  if(s.tts_voice){ const el=document.getElementById("tts-voice"); if(el && [...el.options].some(o=>o.value===s.tts_voice)) el.value=s.tts_voice; }
+  if(s.flow_voice){ const el=document.getElementById("flow-voice"); if(el && [...el.options].some(o=>o.value===s.flow_voice)) el.value=s.flow_voice; }
+  // 更新语速显示
+  const spv=document.getElementById("tts-speed-val");
+  if(spv) spv.textContent=(parseFloat(document.getElementById("tts-speed").value)||1.0).toFixed(1)+"×";
+}
+
+// ---- tabs ----
+document.querySelectorAll(".tab").forEach(t=>{
+  t.onclick=()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    document.querySelectorAll("[data-panel]").forEach(p=>p.classList.add("hidden"));
+    t.classList.add("active");
+    document.querySelector('[data-panel="'+t.dataset.tab+'"]').classList.remove("hidden");
+  };
+});
+
+// ---- health ----
+async function checkHealth(){
+  const setPill=(id,ok)=>{
+    const el=document.getElementById(id);
+    el.className="pill "+(ok?"ok":"bad");
+    el.textContent = ok ? el.dataset.name+" · 在线" : el.dataset.name+" · 离线";
+  };
+  document.getElementById("pill-tts").dataset.name="TTS 8898";
+  document.getElementById("pill-asr").dataset.name="ASR 8899";
+  try{ await fetch(tts("/health"),{method:"GET"}); setPill("pill-tts",true);}catch{ setPill("pill-tts",false);}
+  try{ await fetch(asr("/health"),{method:"GET"}); setPill("pill-asr",true);}catch{ setPill("pill-asr",false);}
+  document.getElementById("dot").style.background =
+    (document.getElementById("pill-tts").classList.contains("ok")||document.getElementById("pill-asr").classList.contains("ok"))
+    ? "var(--acc2)" : "var(--err)";
+}
+checkHealth(); setInterval(checkHealth,8000);
+
+// ---- voices ----
+const VOICE_DEFS = [
+  {id:"am_michael",name:"迈克尔 (美)"},{id:"am_santa",name:"萨姆 (美)"},
+  {id:"am_echo",name:"Echo (美)"},{id:"am_kore",name:"Corey (美)"},
+  {id:"am_onyx",name:"Onyx (美)"},{id:"am_river",name:"River (美)"},
+  {id:"am_santa_2",name:"Santa 2 (美)"},
+  {id:"af_bella",name:"Bella (美·女)"},{id:"af_heart",name:"Heart (美·女)"},
+  {id:"af_alva",name:"Alva (美·女)"},{id:"af_nicole",name:"Nicole (美·女)"},
+  {id:"bm_george",name:"George (英)"},{id:"bm_lewis",name:"Lewis (英)"},
+  {id:"bm_frankie",name:"Frankie (英)"},{id:"bm_santa",name:"Santa (英)"},
+  {id:"bf_isabella",name:"Isabella (英·女)"},{id:"bf_xenophy",name:"Xenophy (英·女)"},
+  {id:"js_speech",name:"JS Speech (日)"},
+  {id:"zm_yunxi",name:"云溪 (中)"},{id:"zm_yunyang",name:"云阳 (中)"},
+  {id:"zf_xiaobei",name:"晓贝 (中·女)"},{id:"zf_xiaoxiao",name:"晓晓 (中·女)"},
+];
+function fillVoiceSel(sel, defaultVoice){
+  VOICE_DEFS.forEach(v=>{
+    const o=document.createElement("option"); o.value=v.id; o.textContent=v.name;
+    sel.appendChild(o);
+  });
+  if(defaultVoice){sel.value=defaultVoice;}
+}
+fillVoiceSel(document.getElementById("tts-voice"),"zm_yunxi");
+fillVoiceSel(document.getElementById("flow-voice"),"af_heart");
+// 恢复上次保存的设置(音色下拉填充完成后)
+restoreSettings();
+// 从 /voices 拉取真实可用音色,过滤掉内置列表里未下载的
+(async()=>{
+  try{
+    const r=await fetch(tts("/voices")); if(!r.ok)return;
+    const j=await r.json();
+    const avail=new Set(j.voices||[]);
+    if(!avail.size)return;
+    [document.getElementById("tts-voice"),document.getElementById("flow-voice")].forEach(sel=>{
+      // 移除不可用的内置项
+      [...sel.options].forEach(o=>{ if(avail.has(o.value)===false && !o.textContent.includes("本地")) o.remove(); });
+      // 追加本地缓存里的新音色
+      avail.forEach(id=>{ if(![...sel.options].some(o=>o.value===id)){const o=document.createElement("option");o.value=id;o.textContent=id+" (本地)";sel.appendChild(o);} });
+      // 恢复后若所选音色仍有效则保留,否则回落到默认
+      restoreSettings();
+    });
+  }catch{}
+})();
+
+// ---- speed ----
+const sp=document.getElementById("tts-speed"), spv=document.getElementById("tts-speed-val");
+sp.oninput=()=>spv.textContent=parseFloat(sp.value).toFixed(1)+"×";
+// 任何控件变化都记一下,刷新自动恢复
+["tts-text","tts-voice","tts-lang","asr-lang","asr-itn","flow-asrlang","flow-voice","flow-ttslang"].forEach(id=>{
+  const el=document.getElementById(id); if(el) el.addEventListener("change",saveSettings);
+});
+sp.addEventListener("change",saveSettings);
+sp.addEventListener("input",saveSettings);
+
+// ---- TTS ----
+document.getElementById("tts-go").onclick=async()=>{
+  const btn=document.getElementById("tts-go");
+  const err=document.getElementById("tts-err"); err.classList.add("hidden");
+  const audio=document.getElementById("tts-audio"); audio.classList.remove("show");
+  const body={text:document.getElementById("tts-text").value.trim(),
+    voice:document.getElementById("tts-voice").value,
+    lang:document.getElementById("tts-lang").value,
+    speed:parseFloat(sp.value)};
+  if(!body.text){err.textContent="请输入文本";err.classList.remove("hidden");return;}
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span> 合成中…';
+  const t0=performance.now();
+  try{
+    const r=await fetch(tts("/tts"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    if(!r.ok){const e=await r.json().catch(()=>({detail:r.statusText}));throw new Error(e.detail||r.statusText);}
+    const blob=await r.blob();
+    audio.src=URL.createObjectURL(blob); audio.classList.add("show");
+    document.getElementById("tts-note").textContent="合成成功 · "+(blob.size/1024).toFixed(0)+" KB · "+((performance.now()-t0)/1000).toFixed(1)+"s";
+  }catch(e){err.textContent="合成失败: "+e.message;err.classList.remove("hidden");}
+  btn.disabled=false; btn.innerHTML="⚡ 合成语音";
+};
+
+// ---- dropzone helper ----
+function wireDrop(id, labelId){
+  const drop=document.getElementById(id), file=drop.querySelector("input"), label=document.getElementById(labelId);
+  drop.onclick=()=>file.click();
+  file.onchange=()=>label.textContent = file.files[0]?file.files[0].name:"点击或拖拽音频文件到此处";
+  ["dragover","dragleave","drop"].forEach(ev=>{
+    drop.addEventListener(ev,e=>{
+      e.preventDefault();
+      if(ev==="dragover")drop.classList.add("over"); else drop.classList.remove("over");
+      if(ev==="drop"){const f=e.dataTransfer.files[0]; if(f)file.files=f; label.textContent=f?f.name:"点击或拖拽音频文件到此处";}
+    });
+  });
+}
+wireDrop("asr-drop","asr-filelabel");
+wireDrop("flow-drop","flow-filelabel");
+
+// ---- ASR ----
+document.getElementById("asr-go").onclick=async()=>{
+  const file=document.getElementById("asr-file").files[0];
+  const err=document.getElementById("asr-err"), out=document.getElementById("asr-out");
+  err.classList.add("hidden"); out.classList.add("hidden");
+  if(!file){err.textContent="请先选择音频文件";err.classList.remove("hidden");return;}
+  const btn=document.getElementById("asr-go"); btn.disabled=true; btn.innerHTML='<span class="spin"></span> 识别中…';
+  const fd=new FormData();
+  fd.append("file",file);
+  fd.append("language",document.getElementById("asr-lang").value);
+  fd.append("itn",document.getElementById("asr-itn").value);
+  const t0=performance.now();
+  try{
+    const r=await fetch(asr("/transcribe"),{method:"POST",body:fd});
+    if(!r.ok){const e=await r.json().catch(()=>({detail:r.statusText}));throw new Error(e.detail||r.statusText);}
+    const j=await r.json();
+    out.classList.remove("hidden","empty"); out.textContent="「"+j.text+"」";
+    const meta=document.createElement("div"); meta.className="meta";
+    meta.textContent="识别耗时 "+(j.time!=null?j.time+((performance.now()-t0)/1000).toFixed(0)+"s":"")+ " · 语言 "+j.language+" · 文件 "+(file.size/1024).toFixed(0)+" KB";
+    out.appendChild(meta);
+  }catch(e){err.textContent="识别失败: "+e.message;err.classList.remove("hidden");}
+  btn.disabled=false; btn.innerHTML="🔍 转写文本";
+};
+
+// ---- FLOW ----
+document.getElementById("flow-go").onclick=async()=>{
+  const file=document.getElementById("flow-file").files[0];
+  const err=document.getElementById("flow-err"), out=document.getElementById("flow-out");
+  const audio=document.getElementById("flow-audio"); audio.classList.remove("show");
+  err.classList.add("hidden"); out.classList.add("hidden");
+  if(!file){err.textContent="请先选择录音文件";err.classList.remove("hidden");return;}
+  const btn=document.getElementById("flow-go"); btn.disabled=true;
+  const step=(s)=>btn.innerHTML='<span class="spin"></span> '+s;
+  try{
+    // 1. ASR
+    step("识别中…");
+    const fd=new FormData();
+    fd.append("file",file);
+    fd.append("language",document.getElementById("flow-asrlang").value);
+    fd.append("itn","true");
+    const ra=await fetch(asr("/transcribe"),{method:"POST",body:fd});
+    if(!ra.ok){const e=await ra.json().catch(()=>({detail:ra.statusText}));throw new Error("ASR 失败: "+(e.detail||ra.statusText));}
+    const j=await ra.json();
+    const text=(j.text||"").trim();
+    if(!text){throw new Error("ASR 未识别到内容,请检查录音");}
+    // 2. TTS
+    step("换音色合成中…");
+    const rt=await fetch(tts("/tts"),{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({text,voice:document.getElementById("flow-voice").value,lang:document.getElementById("flow-ttslang").value,speed:1.0})});
+    if(!rt.ok){const e=await rt.json().catch(()=>({detail:rt.statusText}));throw new Error("TTS 失败: "+(e.detail||rt.statusText));}
+    const blob=await rt.blob();
+    audio.src=URL.createObjectURL(blob); audio.classList.add("show");
+    out.classList.remove("hidden","empty"); out.textContent="识别结果:「"+text+"」";
+    const meta=document.createElement("div"); meta.className="meta";
+    meta.textContent="已用音色 "+document.getElementById("flow-voice").value+" 重新合成 · "+(blob.size/1024).toFixed(0)+" KB";
+    out.appendChild(meta);
+  }catch(e){err.textContent=e.message;err.classList.remove("hidden");}
+  btn.disabled=false; btn.innerHTML="🚀 识别并换音色";
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+# Python
+kokoro/.venv/
+sensevoice/.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# 模型权重(自动下载到 HF cache / ~/.kokoro, 不入库)
+kokoro/output/
+sensevoice/output/
+*.bin
+*.safetensors
+*.pt
+
+# 本地 wheel 缓存(可再下载, 体积大)
+wheels/
+
+# 运行时日志与临时产物
+logs/
+*.log
+upload_*
+
+# 系统/编辑器
+Thumbs.db
+.DS_Store
+*.swp
