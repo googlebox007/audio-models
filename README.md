@@ -1,5 +1,9 @@
 # audio-models — 本地部署 Kokoro-82M (TTS) + SenseVoice-Small (ASR) + EdgeTTS + CosyVoice2
 
+> **给 AI agent / 想无人值守重建的人**：先看 [`AGENTS-DEPLOY.md`](AGENTS-DEPLOY.md)。
+> 它按服务给出可粘贴命令 + 每步验证 + 踩坑清单，重点覆盖 CosyVoice 的依赖链 / 权重 / `patch_loadwav.py`，
+> 结尾有 7 条验收清单。venv 丢了可双击 `rebuild_venvs.bat` 一键重建（不含权重与源码包）。
+
 ## 环境概览
 
 - **GPU**: RTX 3060 12GB (CUDA),torch 2.10.0+cu126 已启用(CosyVoice 当前用 CPU 版,可用 sensevoice venv 的 cu126 torch 提速)
@@ -238,6 +242,13 @@ curl.exe -s -X POST http://127.0.0.1:8898/tts -H "Content-Type: application/json
   (`web_server.py 8890 proxy`),让前端请求经 8890 转发,避免跨域。
 
 ## 八、重新安装(如 venv 丢失)
+
+**一键(推荐)**：双击运行根目录的 `rebuild_venvs.bat`——它会重建 4 个服务 venv
+并装好各自依赖(含 CosyVoice 依赖链与 `patch_loadwav.py` 补丁)。
+**它不下载** CosyVoice 的源码包 `cosyvoice_pkg/`、权重 `model/` 与 Matcha 子模块
+(那三步走 ghproxy / hf-mirror,需要联网,按 `AGENTS-DEPLOY.md` 第 4 节手动做)。
+
+手动等效命令:
 
 ```powershell
 # Kokoro
