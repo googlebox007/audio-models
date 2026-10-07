@@ -43,7 +43,13 @@
 
 ### 0.3 执行顺序（严格按此）
 
+> **先判断现场**：clone 下来 / venv 全丢 → 先跑根目录 `rebuild_venvs.bat`（一键重建 4 个
+> venv + 装好全部依赖，含 CosyVoice 的 `patch_loadwav.py` 补丁）。它**不下载** CosyVoice
+> 源码包 / 权重 / Matcha——那三步仍按 §4.2/§4.3/§4.5 手动做（走 ghproxy / hf-mirror）。
+> 跑完再进入下面的顺序。venv 都在时这步可跳过，直接 `[1]` 起。
+
 ```
+[0] venv 全丢? 先双击 rebuild_venvs.bat  (一键重建 4 个 venv+依赖, 不含权重/源码)
 [1] kokoro venv + 模型        (§1)
 [2] sensevoice venv + 模型     (§2)
 [3] edge venv + 服务          (§3)
@@ -54,6 +60,7 @@
 ```
 
 §4 最耗时长（权重 ~4.5GB + 一堆依赖），放最后做；前 3 个先让 8898/8899/8896 活起来，web 可以先用「降级」状态跑。
+若 `rebuild_venvs.bat` 已跑过，§1-§4 的「建 venv + 装依赖」两步可跳过，直接做「拉源码/权重 + 启动 + 验证」。
 
 ---
 
@@ -482,6 +489,8 @@ I:\GitHub\audio-models\kokoro\.venv\Scripts\python.exe I:\GitHub\audio-models\ma
 ```
 audio-models/
 ├─ manage.py                  # 5 服务统一管理 (start/stop/restart/status)
+├─ rebuild_venvs.bat          # 一键重建 4 个 venv+依赖 (不含权重/源码, 双击跑)
+├─ AGENTS-DEPLOY.md           # 本手册 (给 agent 的无人值守部署指南)
 ├─ test_services.py           # Kokoro→SenseVoice 端到端自检
 ├─ .gitignore                 # 排除所有 venv / 权重 / 源码包 / logs
 ├─ kokoro/    .venv*  server.py  test_kokoro.py
