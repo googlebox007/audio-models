@@ -32,6 +32,7 @@ logs/
 upload_*
 web/patch_index.py
 web/*.bak
+web/last_tts.bin
 
 # 系统/编辑器
 Thumbs.db
