@@ -1,8 +1,8 @@
-# audio-models — 本地部署 Kokoro-82M (TTS) + SenseVoice-Small (ASR)
+# audio-models — 本地部署 Kokoro-82M (TTS) + SenseVoice-Small (ASR) + EdgeTTS + CosyVoice2
 
 ## 环境概览
 
-- **GPU**: RTX 3060 12GB (CUDA),torch 2.10.0+cu126 已启用
+- **GPU**: RTX 3060 12GB (CUDA),torch 2.10.0+cu126 已启用(CosyVoice 当前用 CPU 版,可用 sensevoice venv 的 cu126 torch 提速)
 - **Python**: 3.12 (每个模型独立 venv,互不干扰)
 - **部署路径**: `I:\GitHub\audio-models\`
 
@@ -10,6 +10,8 @@
 |---|---|---|---|---|
 | Kokoro-82M | 文本→语音 (8 语言 54 音色) | `kokoro\` | `kokoro\.venv` | 8898 |
 | SenseVoice-Small | 语音→文本 (中/粤/英/日/韩 + 语种识别 + 情绪/事件) | `sensevoice\` | `sensevoice\.venv` | 8899 |
+| EdgeTTS | 微软神经音色,14 个中文 Neural(走公网,需联网) | `edge\` | `edge\.venv` | 8896 |
+| CosyVoice2-0.5B | 零样本声音克隆,支持参考音频 | `cosyvoice\` | `cosyvoice\.venv` | 8897 |
 
 ---
 
@@ -17,7 +19,7 @@
 
 ### Web 客户端界面(推荐入门方式)
 
-现在 `manage.py start` 会**一次拉起全部三个服务**(两个后端 + Web 客户端),无需再手动起 web:
+现在 `manage.py start` 会**一次拉起全部服务**(Kokoro/SenseVoice/Edge/CosyVoice + Web 客户端),无需再手动起 web:
 
 ```powershell
 # 启动全部(后端先起,Web 最后起;自动后台+日志)
@@ -28,15 +30,15 @@ I:\GitHub\audio-models\kokoro\.venv\Scripts\python.exe I:\GitHub\audio-models\ma
 ```
 
 Web 客户端运行在 **http://127.0.0.1:8890**(proxy 模式,同源无跨域),三个标签页:
-- **🎙️ 语音合成** — 选文字 + 音色 + 语言 + 语速,点"合成",立即试听下载 wav
+- **🎙️ 语音合成** — 可选 TTS 引擎(Kokoro / EdgeTTS / CosyVoice)+ 音色 + 语言 + 语速;CosyVoice 还支持上传参考音频做零样本克隆
 - **📝 语音识别** — 拖入音频文件,选语言,点"转写",立即出文本
 - **🔄 串联 (ASR→TTS)** — 上传录音,自动识别并换成指定音色重新播报
 
 两种模式(浏览器自动适配,前端读 `config.js`):
 | 模式 | 命令 | 原理 | 适用 |
 |---|---|---|---|
-| `static` | `web_server.py 8890 static` | 页面直连 8898/8899(依赖 CORS) | 本地 127.0.0.1 访问 |
-| `proxy` | `web_server.py 8890 proxy` | 前端请求经 8890 转发到两个后端 | 局域网/远程访问、CORS 被拦时(默认) |
+| `static` | `web_server.py 8890 static` | 页面直连各后端(依赖 CORS) | 本地 127.0.0.1 访问 |
+| `proxy` | `web_server.py 8890 proxy` | 前端请求经 8890 转发到各后端(含 edge/cosy 子路由) | 局域网/远程访问、CORS 被拦时(默认) |
 
 `run_web.bat` 支持参数:`run_web.bat 8890 proxy`(默认 8890 / static)。
 
@@ -140,7 +142,70 @@ curl.exe http://127.0.0.1:8899/health
 
 ---
 
-## 四、组合使用:ASR → TTS 工作流
+## 四、EdgeTTS(:8896)— 14 个中文 Neural 音色
+
+EdgeTTS 走微软公网神经语音,需要联网;胜在音色多、零本地权重。
+
+### HTTP API(服务运行时)
+
+```powershell
+# 合成(JSON POST)
+curl.exe -X POST http://127.0.0.1:8896/tts `
+     -H "Content-Type: application/json" `
+     -d '{"text":"你好","voice":"zh-CN-XiaoxiaoNeural","rate":"+0%","pitch":"+0Hz","vol":"+0%"}' `
+     --output out.wav
+
+# 音色列表(14 个中文 Neural)
+curl.exe http://127.0.0.1:8896/voices
+
+# 健康检查
+curl.exe http://127.0.0.1:8896/health
+```
+
+- `voice` 常用:`zh-CN-XiaoxiaoNeural`(晓晓·女)、`zh-CN-YunjianNeural`(云健·男)、
+  `zh-CN-YunxiNeural`(云希·男)、`zh-CN-YunyangNeural`(云阳·男)、
+  `zh-CN-liaoning-XiaobeiNeural`(晓北·辽宁)、`zh-CN-shaanxi-XiaoniNeural`(小妮·陕西)、
+  `zh-HK-HiuGaaiNeural`(港·女)、`zh-TW-YunJheNeural`(台·男)等。
+- `rate` 为百分比字符串,如 `"+20%"` / `"-10%"`;`pitch` 为 Hz,如 `"+0Hz"`;`vol` 为百分比。
+- 输出统一为 WAV(mp3 经本机 ffmpeg 转码)。
+
+---
+
+## 五、CosyVoice2-0.5B(:8897)— 零样本声音克隆
+
+本地权重约 4GB,支持「参考音频 + 文本」零样本克隆,也可用内置 preset。
+当前用 CPU 版 torch 可跑(RTF 偏慢);需要提速可切到 `sensevoice\.venv` 的 cu126 torch。
+
+### HTTP API(服务运行时)
+
+```powershell
+# 内置 preset 合成(multipart)
+curl.exe -X POST http://127.0.0.1:8897/tts `
+     -F "text=你好,这是克隆测试" `
+     -F "preset=zero_shot_prompt" `
+     --output out.wav
+
+# 零样本克隆(上传参考音频,10~30 秒清晰人声)
+curl.exe -X POST http://127.0.0.1:8897/tts `
+     -F "text=你好,这是用你的声音合成的" `
+     -F "ref_audio=@my_voice.wav" `
+     -F "ref_text=参考音频对应的文字" `
+     --output out.wav
+
+# preset 列表
+curl.exe http://127.0.0.1:8897/voices
+
+# 健康检查
+curl.exe http://127.0.0.1:8897/health
+```
+
+- `preset` 取值:`zero_shot_prompt` / `cross_lingual_prompt`(不传 `ref_audio` 时使用)。
+- 传 `ref_audio` 时忽略 `preset`,改为按参考音频克隆;`ref_text` 尽量与参考音频内容一致。
+- 首次请求会触发模型加载,健康检查可能耗时较长。
+
+---
+
+## 六、组合使用:ASR → TTS 工作流
 
 ```powershell
 # 方式 A: 命令行串联
@@ -160,7 +225,7 @@ curl.exe -s -X POST http://127.0.0.1:8898/tts -H "Content-Type: application/json
 
 ---
 
-## 五、常见问题
+## 七、常见问题
 
 - **首次运行慢**: 两个服务首次启动都会自动从 HuggingFace 下载模型权重
   (Kokoro ~320MB,SenseVoice ~900MB),之后就完全离线可用。
@@ -172,7 +237,7 @@ curl.exe -s -X POST http://127.0.0.1:8898/tts -H "Content-Type: application/json
 - **Web 客户端 401/连不上**: 若浏览器从远程访问 `web_server.py`,用 `proxy` 模式
   (`web_server.py 8890 proxy`),让前端请求经 8890 转发,避免跨域。
 
-## 六、重新安装(如 venv 丢失)
+## 八、重新安装(如 venv 丢失)
 
 ```powershell
 # Kokoro
@@ -181,13 +246,15 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install torch torchaudio -U
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 # SenseVoice 同理
+# EdgeTTS: py -3.12 -m venv edge\.venv;edge\.venv\Scripts\python.exe -m pip install "edge-tts>=7.0" fastapi uvicorn
+# CosyVoice: 见 cosyvoice\README(需权重,走 hf-mirror,依赖较多,含 third_party/Matcha-TTS)
 ```
 
 注意: torch CUDA 版从 `https://download.pytorch.org/whl/cu126` 安装(网络不稳时可用本地 wheel 兜底,见 `kokoro\install_local_torch.py`)。
 
 ---
 
-## 七、GitHub 推送备忘
+## 九、GitHub 推送备忘
 
 仓库: `https://github.com/googlebox007/audio-models` (公开,`main` 分支)
 

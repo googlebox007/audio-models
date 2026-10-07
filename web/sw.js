@@ -4,13 +4,12 @@
 //     实时打到后端,后端离线时由页面提示。
 //   - install 时缓存核心壳,activate 时清旧缓存,fetch 时 API 直连、壳走缓存(缓存优先,网络兜底)。
 
-const CACHE = "audio-models-shell-v1";
+const CACHE = "audio-models-shell-v2";
+// 注意: config.js 和 index.html 是"连接开关",绝不能进缓存(否则会锁死旧的后端地址)。
+// 只缓存纯静态、改动很少的资源。
 const CORE = [
-  "./",
-  "./index.html",
   "./manifest.webmanifest",
   "./icon.svg",
-  "./config.js",
 ];
 
 self.addEventListener("install", (e) => {
@@ -32,14 +31,15 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return; // POST 等 API 一律直连,不拦截
 
   const url = new URL(req.url);
-  // API 端点(代理或直连)与上传类请求 → 直连后端
+  // 连接开关与 API 端点 → 永不缓存、直连网络
+  const isSwitch = url.pathname.endsWith("/config.js") || url.pathname.endsWith("/index.html") || url.pathname === "/";
   const isApi =
     req.mode === "navigate" ? false :
     (url.pathname.startsWith("/__proxy/") ||
      url.port === "8898" || url.port === "8899");
-  if (isApi) return; // 不缓存、不拦截,直接放行到网络
+  if (isApi || isSwitch) return; // 不缓存、不拦截,直接放行到网络
 
-  // 界面壳:缓存优先,取不到才走网络,并把网络结果回写缓存(运行中更新)
+  // 其余界面壳(图标/manifest):缓存优先,取不到才走网络,并把网络结果回写缓存
   e.respondWith(
     caches.match(req, { ignoreSearch: true }).then((hit) => {
       const network = fetch(req).then((res) => {

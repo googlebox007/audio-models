@@ -4,13 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0f1117">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-touch-icon" href="icon.svg">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icon.svg">
 <title>本地音频模型 · Kokoro + SenseVoice</title>
 <style>
 :root{
@@ -186,6 +181,14 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px}
     <textarea id="tts-text" placeholder="输入要合成的文字,支持中英日法西等…">你好,这里是本地语音合成服务。</textarea>
     <div class="row">
       <div>
+        <label>TTS 引擎</label>
+        <select id="tts-engine">
+          <option value="kokoro" selected>Kokoro 82M</option>
+          <option value="edge">EdgeTTS（14 个中文音色）</option>
+          <option value="cosy">CosyVoice（克隆）</option>
+        </select>
+      </div>
+      <div>
         <label>音色</label>
         <select id="tts-voice"></select>
       </div>
@@ -213,6 +216,24 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px}
       </div>
     </div>
     <button class="btn" id="tts-go">⚡ 合成语音</button>
+    <div id="tts-cosy-wrap" class="hidden">
+      <label>CosyVoice 参考音频（零样本克隆，10~30 秒清晰人声）</label>
+      <div class="row">
+        <div>
+          <div class="drop" id="tts-cosy-drop" style="padding:12px">
+            <input type="file" id="tts-cosy-file" accept="audio/*">
+            <div id="tts-cosy-filelabel" style="font-size:12px">未选择参考音频（使用内置 preset）</div>
+          </div>
+        </div>
+        <div>
+          <label>Preset（不传参考音频时用）</label>
+          <select id="tts-cosy-preset">
+            <option value="zero_shot_prompt" selected>zero_shot_prompt</option>
+            <option value="cross_lingual_prompt">cross_lingual_prompt</option>
+          </select>
+        </div>
+      </div>
+    </div>
     <div class="errbox hidden" id="tts-err"></div>
     <audio id="tts-audio" controls></audio>
     <p class="note" id="tts-note"></p>
@@ -302,15 +323,18 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px}
 </div>
 <script src="config.js"></script>
 <script>
-// 注册 PWA 离线缓存(添加到主屏幕后可脱机打开界面,API 调用仍需后端在线)
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
+// 自动注销旧的 Service Worker(PWA 已下线),强制下次请求走网络拿最新 config.js
+// 这一步是解决"合成 405"的关键: 旧 SW 缓存了过期 config.js, 注销后不再拦截任何请求
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(r => r.unregister());
   });
 }
 </script>
 <script>
 // 后端地址由 web_server.py 生成的 config.js 决定
+// 代理模式: base=/__proxy, 拼出 /__proxy/tts /__proxy/voices /__proxy/transcribe /__proxy/health
+// 静态模式: base=后端完整 URL, 拼出 http://127.0.0.1:8898/... 直连
 const CFG = window.__APICFG__ || { mode:"static", tts_base:"http://127.0.0.1:8898", asr_base:"http://127.0.0.1:8899" };
 const tts = (p) => CFG.tts_base + p;
 const asr = (p) => CFG.asr_base + p;
@@ -392,9 +416,11 @@ const SETTINGS_KEY = "audio-models-settings";
 function saveSettings(){
   const s = {
     tts_text: document.getElementById("tts-text").value,
+    tts_engine: document.getElementById("tts-engine").value,
     tts_voice: document.getElementById("tts-voice").value,
     tts_lang: document.getElementById("tts-lang").value,
     tts_speed: document.getElementById("tts-speed").value,
+    tts_cosy_preset: document.getElementById("tts-cosy-preset").value,
     asr_lang: document.getElementById("asr-lang").value,
     asr_itn: document.getElementById("asr-itn").value,
     flow_asrlang: document.getElementById("flow-asrlang").value,
@@ -410,10 +436,19 @@ function restoreSettings(){
   set("tts-text", s.tts_text);
   set("tts-lang", s.tts_lang);
   set("tts-speed", s.tts_speed);
+  set("tts-cosy-preset", s.tts_cosy_preset);
   set("asr-lang", s.asr_lang);
   set("asr-itn", s.asr_itn);
   set("flow-asrlang", s.flow_asrlang);
   set("flow-ttslang", s.flow_ttslang);
+  // 引擎（先切引擎，再恢复音色）
+  if(s.tts_engine){
+    const el=document.getElementById("tts-engine");
+    if(el && ["kokoro","edge","cosy"].includes(s.tts_engine)){
+      el.value=s.tts_engine;
+      refreshVoiceSel();
+    }
+  }
   // 音色: 先填下拉,再恢复已选
   if(s.tts_voice){ const el=document.getElementById("tts-voice"); if(el && [...el.options].some(o=>o.value===s.tts_voice)) el.value=s.tts_voice; }
   if(s.flow_voice){ const el=document.getElementById("flow-voice"); if(el && [...el.options].some(o=>o.value===s.flow_voice)) el.value=s.flow_voice; }
@@ -433,6 +468,8 @@ document.querySelectorAll(".tab").forEach(t=>{
 });
 
 // ---- health ----
+// 代理模式: 用聚合端点 /__proxy/health(一次拿两个后端状态, 避免 /__proxy/tts/health 这类错误路径)
+// 静态模式: 各自 GET 后端 /health
 async function checkHealth(){
   const setPill=(id,ok)=>{
     const el=document.getElementById(id);
@@ -441,8 +478,17 @@ async function checkHealth(){
   };
   document.getElementById("pill-tts").dataset.name="TTS 8898";
   document.getElementById("pill-asr").dataset.name="ASR 8899";
-  try{ await fetch(tts("/health"),{method:"GET"}); setPill("pill-tts",true);}catch{ setPill("pill-tts",false);}
-  try{ await fetch(asr("/health"),{method:"GET"}); setPill("pill-asr",true);}catch{ setPill("pill-asr",false);}
+  if(CFG.mode==="proxy"){
+    try{
+      const r=await fetch(tts("/health"),{method:"GET"});
+      const j=await r.json();
+      setPill("pill-tts", !!j.tts);
+      setPill("pill-asr", !!j.asr);
+    }catch{ setPill("pill-tts",false); setPill("pill-asr",false); }
+  } else {
+    try{ await fetch(tts("/health"),{method:"GET"}); setPill("pill-tts",true);}catch{ setPill("pill-tts",false);}
+    try{ await fetch(asr("/health"),{method:"GET"}); setPill("pill-asr",true);}catch{ setPill("pill-asr",false);}
+  }
   document.getElementById("dot").style.background =
     (document.getElementById("pill-tts").classList.contains("ok")||document.getElementById("pill-asr").classList.contains("ok"))
     ? "var(--acc2)" : "var(--err)";
@@ -450,7 +496,8 @@ async function checkHealth(){
 checkHealth(); setInterval(checkHealth,8000);
 
 // ---- voices ----
-const VOICE_DEFS = [
+// Kokoro 内置音色
+const KOKORO_VOICES = [
   {id:"am_michael",name:"迈克尔 (美)"},{id:"am_santa",name:"萨姆 (美)"},
   {id:"am_echo",name:"Echo (美)"},{id:"am_kore",name:"Corey (美)"},
   {id:"am_onyx",name:"Onyx (美)"},{id:"am_river",name:"River (美)"},
@@ -464,33 +511,104 @@ const VOICE_DEFS = [
   {id:"zm_yunxi",name:"云溪 (中)"},{id:"zm_yunyang",name:"云阳 (中)"},
   {id:"zf_xiaobei",name:"晓贝 (中·女)"},{id:"zf_xiaoxiao",name:"晓晓 (中·女)"},
 ];
-function fillVoiceSel(sel, defaultVoice){
-  VOICE_DEFS.forEach(v=>{
+// EdgeTTS 固定列表（14 个中文 Neural）
+const EDGE_VOICES = [
+  {id:"zh-CN-XiaoxiaoNeural",name:"晓晓 (中·女)"},
+  {id:"zh-CN-XiaoyiNeural",name:"晓懿 (中·女)"},
+  {id:"zh-CN-YunjianNeural",name:"云健 (中·男)"},
+  {id:"zh-CN-YunxiNeural",name:"云希 (中·男)"},
+  {id:"zh-CN-YunxiaNeural",name:"云夏 (中·男)"},
+  {id:"zh-CN-YunyangNeural",name:"云阳 (中·男)"},
+  {id:"zh-CN-liaoning-XiaobeiNeural",name:"晓北·辽宁 (中·女)"},
+  {id:"zh-CN-shaanxi-XiaoniNeural",name:"小妮·陕西 (中·女)"},
+  {id:"zh-HK-HiuGaaiNeural",name:"希嘉 (港·女)"},
+  {id:"zh-HK-HiuMaanNeural",name:"希雯 (港·女)"},
+  {id:"zh-HK-WanLungNeural",name:"文龙 (港·男)"},
+  {id:"zh-TW-HsiaoChenNeural",name:"晓辰 (台·女)"},
+  {id:"zh-TW-HsiaoYuNeural",name:"晓宇 (台·女)"},
+  {id:"zh-TW-YunJheNeural",name:"云哲 (台·男)"},
+];
+// CosyVoice preset
+const COSY_VOICES = [
+  {id:"zero_shot_prompt",name:"Preset·zero_shot"},
+  {id:"cross_lingual_prompt",name:"Preset·cross_lingual"},
+];
+
+function fillSel(sel, defs, defVal){
+  sel.innerHTML = "";
+  defs.forEach(v=>{
     const o=document.createElement("option"); o.value=v.id; o.textContent=v.name;
     sel.appendChild(o);
   });
-  if(defaultVoice){sel.value=defaultVoice;}
+  if(defVal && [...sel.options].some(o=>o.value===defVal)) sel.value=defVal;
 }
-fillVoiceSel(document.getElementById("tts-voice"),"zm_yunxi");
-fillVoiceSel(document.getElementById("flow-voice"),"af_heart");
-// 恢复上次保存的设置(音色下拉填充完成后)
-restoreSettings();
-// 从 /voices 拉取真实可用音色,过滤掉内置列表里未下载的
+
+function currentEngine(){ return document.getElementById("tts-engine").value; }
+
+function refreshVoiceSel(){
+  const sel = document.getElementById("tts-voice");
+  const eng = currentEngine();
+  const wrap = document.getElementById("tts-cosy-wrap");
+  wrap.classList.toggle("hidden", eng !== "cosy");
+  if(eng === "kokoro")      fillSel(sel, KOKORO_VOICES, "zm_yunxi");
+  else if(eng === "edge")   fillSel(sel, EDGE_VOICES,   "zh-CN-XiaoxiaoNeural");
+  else if(eng === "cosy")   fillSel(sel, COSY_VOICES,   "zero_shot_prompt");
+}
+
+const engineSel = document.getElementById("tts-engine");
+engineSel.addEventListener("change", () => {
+  refreshVoiceSel();
+  saveSettings();
+});
+
+// 初始填充
+refreshVoiceSel();
+fillSel(document.getElementById("flow-voice"), KOKORO_VOICES, "af_heart");
+
+// 恢复上次保存的设置
+(function restoreEngine(){
+  const s = JSON.parse(localStorage.getItem(SETTINGS_KEY)||"{}");
+  if(s.tts_engine && document.getElementById("tts-engine")){
+    document.getElementById("tts-engine").value = s.tts_engine;
+    refreshVoiceSel();
+  }
+})();
+document.getElementById("tts-engine").addEventListener("change", saveSettings);
+
+// 从 Kokoro /voices 拉取真实可用音色，过滤不可用的内置项
 (async()=>{
   try{
     const r=await fetch(tts("/voices")); if(!r.ok)return;
     const j=await r.json();
     const avail=new Set(j.voices||[]);
     if(!avail.size)return;
-    [document.getElementById("tts-voice"),document.getElementById("flow-voice")].forEach(sel=>{
-      // 移除不可用的内置项
-      [...sel.options].forEach(o=>{ if(avail.has(o.value)===false && !o.textContent.includes("本地")) o.remove(); });
-      // 追加本地缓存里的新音色
-      avail.forEach(id=>{ if(![...sel.options].some(o=>o.value===id)){const o=document.createElement("option");o.value=id;o.textContent=id+" (本地)";sel.appendChild(o);} });
-      // 恢复后若所选音色仍有效则保留,否则回落到默认
-      restoreSettings();
+    [document.getElementById("flow-voice")].forEach(sel=>{
+      [...sel.options].forEach(o=>{ if(!avail.has(o.value)) o.remove(); });
+      avail.forEach(id=>{ if(![...sel.options].some(o=>o.value===id)){
+        const o=document.createElement("option");o.value=id;o.textContent=id+" (本地)";sel.appendChild(o);} });
     });
   }catch{}
+})();
+
+// CosyVoice preset 联动
+document.getElementById("tts-cosy-preset").addEventListener("change", saveSettings);
+document.getElementById("tts-cosy-file").addEventListener("change", saveSettings);
+
+// 拖拽参考音频（CosyVoice）
+(function(){
+  const drop=document.getElementById("tts-cosy-drop");
+  const file=document.getElementById("tts-cosy-file");
+  const label=document.getElementById("tts-cosy-filelabel");
+  drop.onclick=()=>file.click();
+  file.onchange=()=>{ label.textContent = file.files[0]?file.files[0].name:"未选择参考音频（使用内置 preset）"; saveSettings(); };
+  ["dragover","dragleave","drop"].forEach(ev=>{
+    drop.addEventListener(ev,e=>{
+      e.preventDefault();
+      if(ev==="dragover")drop.classList.add("over"); else drop.classList.remove("over");
+      if(ev==="drop"){const f=e.dataTransfer.files[0]; if(f)file.files=f;
+        label.textContent=f?f.name:"未选择参考音频（使用内置 preset）"; saveSettings();}
+    });
+  });
 })();
 
 // ---- speed ----
@@ -508,19 +626,49 @@ document.getElementById("tts-go").onclick=async()=>{
   const btn=document.getElementById("tts-go");
   const err=document.getElementById("tts-err"); err.classList.add("hidden");
   const audio=document.getElementById("tts-audio"); audio.classList.remove("show");
-  const body={text:document.getElementById("tts-text").value.trim(),
-    voice:document.getElementById("tts-voice").value,
-    lang:document.getElementById("tts-lang").value,
-    speed:parseFloat(sp.value)};
-  if(!body.text){err.textContent="请输入文本";err.classList.remove("hidden");return;}
+  const eng=currentEngine();
+  const text=document.getElementById("tts-text").value.trim();
+  if(!text){err.textContent="请输入文本";err.classList.remove("hidden");return;}
   btn.disabled=true; btn.innerHTML='<span class="spin"></span> 合成中…';
   const t0=performance.now();
   try{
-    const r=await fetch(tts("/tts"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-    if(!r.ok){const e=await r.json().catch(()=>({detail:r.statusText}));throw new Error(e.detail||r.statusText);}
-    const blob=await r.blob();
-    audio.src=URL.createObjectURL(blob); audio.classList.add("show");
-    document.getElementById("tts-note").textContent="合成成功 · "+(blob.size/1024).toFixed(0)+" KB · "+((performance.now()-t0)/1000).toFixed(1)+"s";
+    let blob;
+    if(eng==="edge"){
+      // EdgeTTS: JSON POST，rate/pitch 格式为 "+0%" / "+0Hz"
+      const speed=parseFloat(sp.value)||1.0;
+      const ratePct=Math.round((speed-1)*100)+"%";
+      const r=await fetch(CFG.edge_base+"/tts",{method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({text, voice:document.getElementById("tts-voice").value, rate:(speed-1>=0?"+":"")+ratePct, pitch:"+0Hz", vol:"+0%"})});
+      if(!r.ok){const e=await r.json().catch(()=>({detail:r.statusText}));throw new Error("EdgeTTS: "+(e.detail||r.statusText));}
+      blob=await r.blob();
+    } else if(eng==="cosy"){
+      // CosyVoice: multipart/form-data（text + preset + 可选参考音频）
+      const fd=new FormData();
+      fd.append("text", text);
+      const refFile=document.getElementById("tts-cosy-file").files[0];
+      const preset=refFile?null:document.getElementById("tts-cosy-preset").value;
+      if(refFile) fd.append("ref_audio", refFile);
+      else fd.append("preset", preset);
+      const r=await fetch(CFG.cosy_base+"/tts",{method:"POST", body:fd});
+      if(!r.ok){const e=await r.json().catch(()=>({detail:r.statusText}));throw new Error("CosyVoice: "+(e.detail||r.statusText));}
+      blob=await r.blob();
+    } else {
+      // Kokoro: JSON POST
+      const body={text, voice:document.getElementById("tts-voice").value,
+        lang:document.getElementById("tts-lang").value,
+        speed:parseFloat(sp.value)};
+      const r=await fetch(tts("/tts"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      if(!r.ok){const e=await r.json().catch(()=>({detail:r.statusText}));throw new Error(e.detail||r.statusText);}
+      blob=await r.blob();
+    }
+    if(blob.size===0){throw new Error("后端返回 0 字节,可能模型未就绪,请重试");}
+    if(audio.src && audio.src.startsWith("blob:")) URL.revokeObjectURL(audio.src);
+    audio.src=URL.createObjectURL(blob);
+    audio.classList.add("show");
+    document.getElementById("tts-note").textContent=
+      (eng==="kokoro"?"Kokoro":eng==="edge"?"EdgeTTS":"CosyVoice")+" · "+
+      (blob.size/1024).toFixed(0)+" KB · "+((performance.now()-t0)/1000).toFixed(1)+"s";
   }catch(e){err.textContent="合成失败: "+e.message;err.classList.remove("hidden");}
   btn.disabled=false; btn.innerHTML="⚡ 合成语音";
 };
@@ -592,7 +740,11 @@ document.getElementById("flow-go").onclick=async()=>{
       body:JSON.stringify({text,voice:document.getElementById("flow-voice").value,lang:document.getElementById("flow-ttslang").value,speed:1.0})});
     if(!rt.ok){const e=await rt.json().catch(()=>({detail:rt.statusText}));throw new Error("TTS 失败: "+(e.detail||rt.statusText));}
     const blob=await rt.blob();
-    audio.src=URL.createObjectURL(blob); audio.classList.add("show");
+    if(blob.size===0){throw new Error("后端返回 0 字节,请重试");}
+    // 统一用 blob:浏览器已持有完整音频,避免服务端 GET/Range 路径的 204/范围错误
+    if(audio.src && audio.src.startsWith("blob:")) URL.revokeObjectURL(audio.src);
+    audio.src=URL.createObjectURL(blob);
+    audio.classList.add("show");
     out.classList.remove("hidden","empty"); out.textContent="识别结果:「"+text+"」";
     const meta=document.createElement("div"); meta.className="meta";
     meta.textContent="已用音色 "+document.getElementById("flow-voice").value+" 重新合成 · "+(blob.size/1024).toFixed(0)+" KB";

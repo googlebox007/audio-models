@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-"""管理 Kokoro (TTS :8898)、SenseVoice (ASR :8899) 和 Web 客户端 (:8890) 三个本地服务。
+"""管理本地音频服务: Kokoro(TTS :8898)、SenseVoice(ASR :8899)、
+EdgeTTS(:8896)、CosyVoice2(:8897) 与 Web 客户端(:8890)。
 
 用法:
-    python manage.py start      # 启动三个服务(已运行则跳过,Web 最后起)
-    python manage.py stop       # 停止三个服务(Web 先停)
-    python manage.py restart    # 重启三个服务
+    python manage.py start      # 启动全部服务(已运行则跳过,Web 最后起)
+    python manage.py stop       # 停止全部服务(Web 先停)
+    python manage.py restart    # 重启全部服务
     python manage.py status     # 查看运行状态
 """
 import os
@@ -33,6 +34,20 @@ SERVICES = {
         "venv": os.path.join(BASE, "sensevoice", ".venv", "Scripts", "python.exe"),
         "script": os.path.join(BASE, "sensevoice", "server.py"),
         "log": os.path.join(LOG_DIR, "sensevoice.log"),
+    },
+    "edge": {
+        "name": "EdgeTTS",
+        "port": 8896,
+        "venv": os.path.join(BASE, "edge", ".venv", "Scripts", "python.exe"),
+        "script": os.path.join(BASE, "edge", "server.py"),
+        "log": os.path.join(LOG_DIR, "edge.log"),
+    },
+    "cosy": {
+        "name": "CosyVoice2",
+        "port": 8897,
+        "venv": os.path.join(BASE, "cosyvoice", ".venv", "Scripts", "python.exe"),
+        "script": os.path.join(BASE, "cosyvoice", "server.py"),
+        "log": os.path.join(LOG_DIR, "cosy.log"),
     },
     "web": {
         "name": "Web 客户端",
@@ -130,9 +145,10 @@ def status():
 
 def main():
     cmd = sys.argv[1].lower() if len(sys.argv) > 1 else "status"
-    # 启动顺序:两个后端先起,Web 客户端最后(它要反代到 8898/8899)
-    start_order = ("kokoro", "sensevoice", "web")
-    stop_order = ("web", "sensevoice", "kokoro")
+    # 启动顺序:后端先起,Web 客户端最后(它要反代到各后端)
+    # CosyVoice 模型加载最久,放在最后给足时间
+    start_order = ("kokoro", "sensevoice", "edge", "cosy", "web")
+    stop_order = ("web", "cosy", "edge", "sensevoice", "kokoro")
     if cmd == "start":
         for k in start_order:
             start_service(k)

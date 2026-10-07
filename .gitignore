@@ -1,6 +1,8 @@
 # Python
 kokoro/.venv/
 sensevoice/.venv/
+edge/.venv/
+cosyvoice/.venv/
 __pycache__/
 *.pyc
 *.pyo
@@ -8,6 +10,11 @@ __pycache__/
 # 模型权重(自动下载到 HF cache / ~/.kokoro, 不入库)
 kokoro/output/
 sensevoice/output/
+cosyvoice/model/        # CosyVoice2 权重与 GPT 前端 ~5GB, 整个目录不入库
+cosyvoice/model/**
+cosyvoice/*.onnx
+cosyvoice/*.pt
+*.onnx
 *.bin
 *.safetensors
 *.pt
@@ -15,10 +22,16 @@ sensevoice/output/
 # 本地 wheel 缓存(可再下载, 体积大)
 wheels/
 
+# CosyVoice 源码与第三方库(可再拉, 不进库)
+cosyvoice/cosyvoice_pkg/
+cosyvoice/cosyvoice/
+
 # 运行时日志与临时产物
 logs/
 *.log
 upload_*
+web/patch_index.py
+web/*.bak
 
 # 系统/编辑器
 Thumbs.db
